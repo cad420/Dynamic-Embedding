@@ -57,7 +57,7 @@ class subgraphBernoulli:
         for t in range(self.hp.T - 1):
             L_smooth += tf.reduce_sum((self.y[t + 1] - self.y[t]) ** 2)
         L_reg = tf.reduce_sum(self.alpha**2) + tf.reduce_sum(self.y[0]**2)
-        loss = 1000*(L_pos + L_neg) + self.hp.lam*L_smooth + self.hp.lam*L_reg
+        loss = (L_pos + L_neg) + self.hp.lam*L_smooth + self.hp.lam*L_reg
         global_step = tf.train.get_or_create_global_step()
         lr = noam_scheme(self.hp.lr, global_step, self.hp.warmup_steps)
         optimizer = tf.train.AdamOptimizer(lr)

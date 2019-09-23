@@ -39,6 +39,7 @@ def main():
         sess.run(tf.global_variables_initializer())
 
         total_steps = hp.epochs * (hp.node_num//hp.batch_size)
+        thres = hp.node_num//hp.batch_size
         _gs = sess.run(global_step)
         idx = 0
         last_loss = 999999999999999999999
@@ -54,7 +55,7 @@ def main():
             epoch = math.ceil(_gs / hp.batch_size)
             print("   Epoch : %02d   loss : %.2f" % (epoch, _loss))
             idx = idx+hp.batch_size//2
-            if _gs % 20 == 0:
+            if (_gs - thres) % 100 == 0 and _gs!=0:
                 if _loss < last_loss:
                     last_loss = _loss
                     sess.run([save])
