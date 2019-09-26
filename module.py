@@ -25,7 +25,7 @@ def noam_scheme(init_lr, global_step, warmup_steps=4000.):
 
 def negative_sampling(unigram, ns, node):
     neg_set = []
-    for i in range(ns):
+    while len(neg_set) < ns:
         neg = random.random()
         L = 0
         R = len(unigram) - 1
@@ -35,8 +35,8 @@ def negative_sampling(unigram, ns, node):
                 L = mid + 1
             else:
                 R = mid
-        if L-1 == node:
-            L = (L + 1)%(len(unigram)-1)+1
+        if L-1 in node:
+            continue
         neg_set.append(L-1)
     return neg_set
 
