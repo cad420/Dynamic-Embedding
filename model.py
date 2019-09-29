@@ -4,7 +4,7 @@ import os
 import sys
 from args import parse_args
 arg = parse_args()
-from module import get_initialization, noam_scheme
+from module import get_initialization, noam_scheme, accuracy
 
 def save_emb(y, alpha):
     file_path = '../Embeddings/subgraphBernoulli/' + arg.dataset + '/'
@@ -21,6 +21,7 @@ def save_emb(y, alpha):
         file.close()
     file_nam = file_path+'alpha.con'
     file = open(file_nam, 'w')
+    file.write(str(arg.node_num)+' '+str(arg.dim)+'\n')
     for v in range(arg.node_num):
         file.write(str(v))
         for it in alpha[v]:
@@ -30,7 +31,6 @@ def save_emb(y, alpha):
     return 1
 
 class subgraphBernoulli:
-
     def __init__(self, args):
         self.hp = args['hp']
         self.alpha, self.y = get_initialization(self.hp)
@@ -42,7 +42,6 @@ class subgraphBernoulli:
         L_neg = 0
         L_smooth = 0
         L_con = 0
-        L_reg = 0
         L_ucon = 0
 
         for t in range(self.hp.T):
@@ -74,7 +73,7 @@ class subgraphBernoulli:
         for t in range(self.hp.T - 1):
             L_smooth += tf.reduce_sum((self.y[t + 1] - self.y[t]) ** 2)
         L_reg = tf.reduce_sum(self.alpha**2) + tf.reduce_sum(self.y[0]**2)
-        loss = (L_con + L_ucon) + (L_pos + L_neg) + self.hp.lam * (L_smooth + L_reg)
+        loss = (L_con + L_ucon) + (L_pos + L_neg) + self.hp.lam*(L_reg) + L_smooth
         # loss = (L_con + L_ucon) + 0.0001*(L_pos + L_neg) + 0.0001*(L_smooth + L_reg)
         global_step = tf.train.get_or_create_global_step()
         # lr = noam_scheme(self.hp.lr, global_step, self.hp.warmup_steps)
@@ -83,6 +82,10 @@ class subgraphBernoulli:
         train_op = optimizer.minimize(loss, global_step=global_step)
 
         return loss, train_op, global_step
+
+    def eval(self, evl):
+        AUC = tf.py_func(accuracy, [evl, self.y[-1]], tf.double, stateful=True)
+        return AUC
 
     def save_embeddings(self):
         flg = tf.py_func(save_emb, [self.y, self.alpha], tf.int32)

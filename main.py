@@ -6,7 +6,7 @@ import tensorflow as tf
 from model import subgraphBernoulli
 from tqdm import tqdm
 from module import Graphs
-from load_data import train_data
+from load_data import train_data, eval_data
 
 from args import parse_args
 import math
@@ -25,7 +25,7 @@ def main():
     arg['hp'] = hp
     arg['unigram'] = unigram
     arg['nodes'] = [i for i in range(hp.node_num)]
-
+    thres = hp.node_num // (hp.batch_size // 2)
     print("构建模型")
     m = subgraphBernoulli(arg)
     xc_0 = [tf.placeholder(dtype=tf.int32, shape=(hp.batch_size_con, 1), name='xc_0_'+str(_)) for _ in range(hp.T)]
@@ -35,21 +35,24 @@ def main():
     xs = [tf.placeholder(dtype=tf.int32, shape=(hp.batch_size, hp.k), name='xs_'+str(_)) for _ in range(hp.T)]
     xn = [tf.placeholder(dtype=tf.int32, shape=(hp.batch_size, hp.k, hp.k-1), name='xn_'+str(_)) for _ in range(hp.T)]
     xg = [tf.placeholder(dtype=tf.int32, shape=(hp.batch_size, hp.k, hp.ns), name='xg_'+str(_)) for _ in range(hp.T)]
+    evl = tf.placeholder(dtype=tf.int32, shape=(2, hp.eval_size, 2), name='eval')
     loss, train_op, global_step = m.train(xc_0, xc_1, xuc_0, xuc_1, xs, xn, xg)
+    accuracy = m.eval(evl)
     # loss, train_op, global_step = m.train(xs, xn, xg)
     save = m.save_embeddings()
+    evl_data = eval_data(hp, G_list[-1], G_list[-2])
     print("开始训练")
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
 
         total_steps = hp.epochs * (hp.node_num//hp.batch_size)
-        thres = hp.node_num//(hp.batch_size//2)
         _gs = sess.run(global_step)
         idx = 0
-        last_loss = 999999999999999999999
+        last_loss = 0
+        last_AUC = 0
         for i in tqdm(range(_gs, total_steps+1)):
-            da_xc, da_xuc, da_xs, da_xn, da_xg = train_data(hp, G_list, unigram_set, idx)
+            da_xc, da_xuc, da_xs, da_xn, da_xg = train_data(hp, G_list[:-1], unigram_set, idx)
             xc_0_dict = {i: j for i, j in zip(xc_0, da_xc[0])}
             xc_1_dict = {i: j for i, j in zip(xc_1, da_xc[1])}
             xuc_0_dict = {i: j for i, j in zip(xuc_0, da_xuc[0])}
@@ -65,12 +68,17 @@ def main():
             data = {**data, **xg_dict}
             # print(data)
             _loss, _, _gs = sess.run([loss, train_op, global_step], feed_dict=data)
+            _auc = sess.run([accuracy], feed_dict={evl: evl_data})
             epoch = math.ceil(_gs / hp.batch_size)
-            print("   Epoch : %02d   loss : %.2f" % (epoch, _loss))
+            print("   Epoch : %02d   loss : %.2f  AUC : %.3f" % (epoch, _loss, _auc[0]))
             idx = (idx + 1) % thres
-            if _gs % 100 == 0 and _gs > thres:
-                if _loss < last_loss:
-                    last_loss = _loss
+            if _gs % 10 == 0 and _gs > thres:
+                # if _loss < last_loss:
+                #     last_loss = _loss
+                #     sess.run([save])
+                #     print('保存成功！')
+                if _auc[0] > last_AUC:
+                    last_AUC = _auc[0]
                     sess.run([save])
                     print('保存成功！')
                 else:

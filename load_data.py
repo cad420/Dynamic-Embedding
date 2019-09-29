@@ -146,3 +146,29 @@ def train_data(hp, G_list, unigram, idx):
     # print(subgraph_set[0].shape)
     return connection_set, unconnection_set, subgraph_set, neighbor_set, negative_set
 
+def eval_data(hp, G, G_0):
+    data = np.zeros((2, hp.eval_size, 2)).astype('int32')
+    edges = list(G.edges())
+    for i in range(hp.eval_size):
+        data[0][i][0] = edges[i][0]
+        data[0][i][1] = edges[i][1]
+    cou = 0
+    a = list(G_0.nodes())
+    random.shuffle(a)
+    b = list(G_0.nodes())
+    random.shuffle(b)
+    # print(len(label))
+    for i in a:
+        if cou >= hp.eval_size:
+            break
+        for j in b:
+            if cou >= hp.eval_size:
+                break
+            if i == j:
+                continue
+            # if 0!=1:
+            if not G_0.has_edge(i, j):
+                data[1][cou][0] = i
+                data[1][cou][1] = j
+                cou += 1
+    return data
