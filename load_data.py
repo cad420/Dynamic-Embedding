@@ -2,7 +2,8 @@ from multiprocessing import Pool
 from module import negative_sampling
 import random
 import numpy as np
-def sampling(thre_ID, hp, G, unigram, ix):
+import networkx as nx
+def sampling(thre_ID, hp, G, degree, ix):
     node_set = list(G.nodes())
     edge_set = list(G.edges())
     node_num = len(node_set)
@@ -10,12 +11,14 @@ def sampling(thre_ID, hp, G, unigram, ix):
     black = [0 for i in range(hp.node_num)]
     connection_0_set = []
     connection_1_set = []
+    weight_connection = []
     unconnection_0_set = []
     unconnection_1_set = []
     subgraph_set = []
     neighbor_set = []
-    negative_set = []
-    sub_target = hp.batch_size//2
+    weight_subgraph = []
+
+    sub_target = hp.batch_size
     inx = (ix * hp.batch_size) % node_num
     imx = (ix * hp.batch_size_con) % edge_num
     i = 0
@@ -25,6 +28,7 @@ def sampling(thre_ID, hp, G, unigram, ix):
         edge = edge_set[(imx + i) % edge_num]
         connection_0_set.append(edge[0])
         connection_1_set.append(edge[1])
+        weight_connection.append(1)
         i += 1
     # unconnection sampling
     a = [i for i in range(hp.node_num)]
@@ -32,11 +36,12 @@ def sampling(thre_ID, hp, G, unigram, ix):
     b = [i for i in range(hp.node_num)]
     random.shuffle(b)
     # print(len(label))
+    neg_num = hp.ns*hp.batch_size
     for i in a:
-        if len(unconnection_0_set) >= hp.batch_size_con:
+        if len(unconnection_0_set) >= neg_num:
             break
         for j in b:
-            if len(unconnection_0_set) >= hp.batch_size_con:
+            if len(unconnection_0_set) >= neg_num:
                 break
             if i == j:
                 continue
@@ -52,99 +57,61 @@ def sampling(thre_ID, hp, G, unigram, ix):
         if black[idx]:
             i += 1
             continue
-        seta = 2 * hp.k
-        tem_vis = [0 for j in range(hp.node_num)]
-        tem_node_set = set()
         sub_node_set = []
-        tem_node_set.add(idx)
-        tem_vis[idx] = 1
+        sub_node_set.append(idx)
+        P = 1/hp.k
         while len(sub_node_set) < hp.k:
-            choose_node = random.sample(tem_node_set, 1)
-            tem_node_set.remove(choose_node[0])
-            sub_node_set.append(choose_node[0])
-            if len(tem_node_set) < seta:
-                for j in G.neighbors(choose_node[0]):
-                    if not tem_vis[j]:
-                        tem_vis[j] = 1
-                        tem_node_set.add(j)
-            if (len(tem_node_set) <= 0):
-                break
+            choose_node = random.sample(sub_node_set, 1)
+            neig = list(G.adj[choose_node[0]])
+            wei_arr = np.zeros((len(neig)))
+            all_wei = 0
+            for i, node in enumerate(neig):
+                all_wei += degree[node]
+                wei_arr[i] = all_wei
+            wei_arr /= all_wei
+            tar = random.random()
+            L, R = 0, len(wei_arr)
+            while L < R:
+                mid = (L+R)//2
+                if wei_arr[mid] < tar:
+                    L = mid + 1
+                else:
+                    R  = mid
+            if L<0 or L>= len(neig):
+                L = 0
+            sub_node_set.append(neig[L])
+            if G.has_edge(sub_node_set[0], sub_node_set[-1]):
+                P *= (1/degree[sub_node_set[-1]])
+
         if len(sub_node_set) == hp.k:
-            subgraph_set.append(sub_node_set)
+            subgraph_set.append(sub_node_set[0])
+            neighbor_set.append(sub_node_set[1:])
+            weight_subgraph.append(P)
 
-            tem_nei_set = []
-            for i in range(hp.k):
-                tem_nei_set.append(sub_node_set[:i] + sub_node_set[i + 1:])
-            neighbor_set.append(tem_nei_set)
-
-            tem_neg_set = []
-            for i in range(hp.k):
-                neg_set = negative_sampling(unigram, hp.ns, sub_node_set)
-                tem_neg_set.append(neg_set)
-            negative_set.append(tem_neg_set)
         else:
             black[idx] = 1
         i += 1
         # print("\r游走第%d个图中（指定）  %.4f" % (thre_ID, i / hp.batch_size), end=" ")
 
-    # random nodes with unigram distribution
-    while len(subgraph_set) < hp.batch_size:
-        neg_it = negative_sampling(unigram, 1, [-1])[0]
-        idx = node_set[neg_it]
-        if black[idx]:
-            continue
-        seta = 5 * hp.k
-        tem_vis = [0 for j in range(hp.node_num)]
-        tem_node_set = set()
-        sub_node_set = []
-        tem_node_set.add(idx)
-        tem_vis[idx] = 1
-        while len(sub_node_set) < hp.k:
-            choose_node = random.sample(tem_node_set, 1)
-            tem_node_set.remove(choose_node[0])
-            sub_node_set.append(choose_node[0])
-            if len(tem_node_set) < seta:
-                for j in G.neighbors(choose_node[0]):
-                    if not tem_vis[j]:
-                        tem_vis[j] = 1
-                        tem_node_set.add(j)
-            if (len(tem_node_set) <= 0):
-                break
-        if len(sub_node_set) == hp.k:
-            subgraph_set.append(sub_node_set)
-
-            tem_nei_set = []
-            for i in range(hp.k):
-                tem_nei_set.append(sub_node_set[:i]+sub_node_set[i+1:])
-            neighbor_set.append(tem_nei_set)
-
-            tem_neg_set = []
-            for i in range(hp.k):
-                neg_set = negative_sampling(unigram, hp.ns, sub_node_set)
-                tem_neg_set.append(neg_set)
-            negative_set.append(tem_neg_set)
-        else:
-            black[idx] = 1
-        # print("\r游走%d个图中（随机）  %.4f" % (thre_ID, i / hp.batch_size), end=" ")
-    return [[np.array(connection_0_set).reshape(hp.batch_size_con, 1), np.array(connection_1_set).reshape(hp.batch_size_con, 1)], [np.array(unconnection_0_set).reshape(hp.batch_size_con, 1), np.array(unconnection_1_set).reshape(hp.batch_size_con, 1)],
-            np.array(subgraph_set), np.array(neighbor_set), np.array(negative_set)]
+    return [[np.array(connection_0_set).reshape(hp.batch_size_con, 1), np.array(connection_1_set).reshape(hp.batch_size_con, 1), np.array(weight_connection).reshape(hp.batch_size_con, 1)],
+            [np.array(unconnection_0_set).reshape(neg_num, 1), np.array(unconnection_1_set).reshape(neg_num, 1)],
+            [np.array(subgraph_set).reshape(hp.batch_size, 1), np.array(neighbor_set), np.array(weight_subgraph).reshape(hp.batch_size, 1)]]
 
 def train_data(hp, G_list, unigram, idx):
     results = []
+    degree = [nx.degree(G) for G in G_list]
     pool = Pool(processes=hp.T)
     for t in range(hp.T):
         results.append(
-            pool.apply_async(sampling, (t, hp, G_list[t], unigram[t], idx)))
+            pool.apply_async(sampling, (t, hp, G_list[t], degree[t], idx)))
     pool.close()
     pool.join()
     results = [res.get() for res in results]
-    connection_set = [[results[i][0][0] for i in range(hp.T)], [results[i][0][1] for i in range(hp.T)]]
+    connection_set = [[results[i][0][0] for i in range(hp.T)], [results[i][0][1] for i in range(hp.T)], [results[i][0][2] for i in range(hp.T)]]
     unconnection_set = [[results[i][1][0] for i in range(hp.T)], [results[i][1][1] for i in range(hp.T)]]
-    subgraph_set = [results[i][2] for i in range(hp.T)]
-    neighbor_set = [results[i][3] for i in range(hp.T)]
-    negative_set = [results[i][4] for i in range(hp.T)]
+    subgraph_set = [[results[i][2][0] for i in range(hp.T)], [results[i][2][1] for i in range(hp.T)], [results[i][2][2] for i in range(hp.T)]]
     # print(subgraph_set[0].shape)
-    return connection_set, unconnection_set, subgraph_set, neighbor_set, negative_set
+    return connection_set, unconnection_set, subgraph_set
 
 def eval_data(hp, G, G_0):
     data = np.zeros((2, hp.eval_size, 2)).astype('int32')

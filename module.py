@@ -6,6 +6,8 @@ import networkx as nx
 from sklearn.metrics import roc_auc_score
 from sklearn.linear_model import LogisticRegression
 from multiprocessing import Pool
+from sklearn.multiclass import OneVsRestClassifier
+from sklearn import svm
 
 def emb_value_cos(x, y):
     a_b = np.dot(x, y)
@@ -21,13 +23,17 @@ def emb_value_weight_2(x, y):
 
     return a_b.reshape(1)
 
+def node_classification(x, x_label, y, y_lable):
+    cls = OneVsRestClassifier(svm.SVC(kernel='linear', random_state=np.random.RandomState(0)))
+    cls.fit(x, x_label)
+
 def get_initialization(hp):
-    alpha_init = (np.random.randn(hp.node_num, hp.dim) / hp.dim).astype('float32')
-    y_init = (np.random.randn(hp.node_num, hp.dim) / hp.dim).astype('float32')
+    alpha_init = (np.random.randn(hp.node_num, hp.dim) / np.sqrt(hp.node_num/2)).astype('float32')
+    y_init = (np.random.randn(hp.node_num, hp.dim) / np.sqrt(hp.node_num/2)).astype('float32')
     alpha = tf.Variable(alpha_init, name='context_embedding', trainable=True)
     y = []
     for t in range(hp.T):
-        y.append(tf.Variable(y_init + 0.001 * tf.random_normal([hp.node_num, hp.dim]) / hp.dim,
+        y.append(tf.Variable(y_init + 0.001 * tf.random_normal([hp.node_num, hp.dim]) / np.sqrt(hp.node_num/2),
                              name='emb_'+str(t), trainable=True))
     return alpha, y
 

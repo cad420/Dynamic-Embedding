@@ -37,44 +37,39 @@ class subgraphBernoulli:
         self.unigram = args['unigram']
         self.nodes = args['nodes']
 
-    def train(self, xc_0, xc_1, xuc_0, xuc_1, xs, xn, xg):
+    def train(self, xc_0, xc_1, wc, xuc_0, xuc_1, xs, xn, ws):
         L_pos = 0
-        L_neg = 0
         L_smooth = 0
         L_con = 0
         L_ucon = 0
 
-        for t in range(self.hp.T):
-            tar_emb = tf.nn.embedding_lookup(self.y[t], xs[t]) # (batch, k, dim)
-            nei_emb = tf.squeeze(tf.reduce_sum(tf.nn.embedding_lookup(self.alpha, xn[t]), 2)) # (batch, k, dim)
-            neg_emb = tf.nn.embedding_lookup(self.alpha, xg[t]) # (batch, k, ns, dim)
-            neg_emb = tf.squeeze(tf.reduce_sum(neg_emb, 2))
-            con_0_emb = tf.squeeze(tf.nn.embedding_lookup(self.y[t], xc_0[t]))
-            con_1_emb = tf.squeeze(tf.nn.embedding_lookup(self.y[t], xc_1[t]))
-            ucon_0_emb = tf.squeeze(tf.nn.embedding_lookup(self.y[t], xuc_0[t]))
-            ucon_1_emb = tf.squeeze(tf.nn.embedding_lookup(self.y[t], xuc_1[t]))
+        # self.alpha = tf.divide(self.alpha, tf.reduce_sum(self.alpha, -1))
+        # for t in range(self.hp.T):
+        #     self.y[t] = tf.divide(self.y[t], tf.reduce_sum(self.y[t], -1))
 
-            pos_v = tf.sigmoid(tf.squeeze(tf.reduce_sum(tf.einsum('nij,nij->nij', tar_emb, nei_emb), -1)))
-            neg_v = tf.sigmoid(tf.squeeze(tf.reduce_sum(tf.einsum('nij, nij->nij', neg_emb, nei_emb), -1)))
+        for t in range(self.hp.T):
+            tar_emb = tf.squeeze(tf.nn.embedding_lookup(self.y[t], xs[t])) # (batch, dim)
+            nei_emb = tf.squeeze(tf.reduce_sum(tf.nn.embedding_lookup(self.alpha, xn[t]), 1)) # (batch, dim)
+            # neg_emb = tf.nn.embedding_lookup(self.alpha, xg[t]) # (batch, k, ns, dim)
+            # neg_emb = tf.squeeze(tf.reduce_sum(neg_emb, 2))
+            con_0_emb = tf.squeeze(tf.nn.embedding_lookup(self.y[t], xc_0[t]))# (batch,  dim)
+            con_1_emb = tf.squeeze(tf.nn.embedding_lookup(self.y[t], xc_1[t]))# (batch,  dim)
+            ucon_0_emb = tf.squeeze(tf.nn.embedding_lookup(self.y[t], xuc_0[t]))# (batch,  dim)
+            ucon_1_emb = tf.squeeze(tf.nn.embedding_lookup(self.y[t], xuc_1[t]))# (batch,  dim)
+
+            pos_v = tf.sigmoid(tf.squeeze(tf.reduce_sum(tf.einsum('ni,ni->ni', tar_emb, nei_emb), -1)))
             con_v = tf.sigmoid(tf.squeeze(tf.reduce_sum(tf.einsum('ni,ni->ni', con_0_emb, con_1_emb), -1)))
             ucon_v = tf.sigmoid(tf.squeeze(tf.reduce_sum(tf.einsum('ni,ni->ni', ucon_0_emb, ucon_1_emb), -1)))
 
             # 用ground truth来算loss
-            L_con -= tf.reduce_sum(tf.log(con_v + 1e-15))  # connection
+            L_con -= tf.reduce_sum(wc*tf.log(con_v + 1e-15))  # connection
             L_ucon -= tf.reduce_sum(tf.log(1 - ucon_v + 1e-15))  # unconnection
-            L_pos -= tf.reduce_sum(tf.log(pos_v+1e-15))
-            L_neg -= tf.reduce_sum(tf.log(1-neg_v+1e-15))
+            L_pos -= tf.reduce_sum(ws*tf.log(pos_v+1e-15))
 
-            # 用cross entropy 算loss
-            # L_con -= tf.reduce_sum(tf.multiply(con_v, tf.log(con_v + 1e-15)))  # connection
-            # L_ucon -= tf.reduce_sum(tf.multiply(1 - ucon_v, tf.log(1 - ucon_v + 1e-15)))  # unconnection
-            # L_pos -= tf.reduce_sum(tf.multiply(pos_v, tf.log(pos_v + 1e-15)))
-            # L_neg -= tf.reduce_sum(tf.multiply((1 - neg_v), tf.log(1 - neg_v + 1e-15)))
         for t in range(self.hp.T - 1):
             L_smooth += tf.reduce_sum((self.y[t + 1] - self.y[t]) ** 2)
-        L_reg = tf.reduce_sum(self.alpha**2) + tf.reduce_sum(self.y[0]**2)
-        loss = (L_con + L_ucon) + (L_pos + L_neg) + self.hp.lam*(L_reg) + L_smooth
-        # loss = (L_con + L_ucon) + 0.0001*(L_pos + L_neg) + 0.0001*(L_smooth + L_reg)
+
+        loss = (L_con + L_ucon) + L_pos + L_smooth
         global_step = tf.train.get_or_create_global_step()
         # lr = noam_scheme(self.hp.lr, global_step, self.hp.warmup_steps)
         lr = self.hp.lr
