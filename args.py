@@ -5,7 +5,7 @@ def parse_args():
 
     # training scheme
     parser.add_argument('--epochs', default=500, type=int)
-    parser.add_argument('--batch_size_con', default=5000, type=int)
+    parser.add_argument('--batch_size_con', default=10000, type=int)
     parser.add_argument('--batch_size', default=5000, type=int)
     parser.add_argument('--eval_size', default=3000, type=int)
 
@@ -23,7 +23,7 @@ def parse_args():
                         help='Name of dataset')
     parser.add_argument('--node_num', type=int, default=46952,
                         help='graph size.')
-    parser.add_argument('--T', type=int, default=4, help='Number of snapshots.')
+    parser.add_argument('--T', type=int, default=10, help='Number of snapshots.')
 
     args = parser.parse_args()
     return args

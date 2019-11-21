@@ -25,7 +25,6 @@ def main():
     arg['hp'] = hp
     arg['unigram'] = unigram
     arg['nodes'] = [i for i in range(hp.node_num)]
-    thres = hp.node_num // (hp.batch_size // 2)
     print("构建模型")
     m = subgraphBernoulli(arg)
     xc_0 = [tf.placeholder(dtype=tf.int32, shape=(hp.batch_size_con, 1), name='xc_0_'+str(_)) for _ in range(hp.T)]
@@ -44,11 +43,12 @@ def main():
     save = m.save_embeddings()
     evl_data = eval_data(hp, G_list[-1], G_list[-2])
     print("开始训练")
-
+    total_edge = len(G_list[0].edges())*hp.T
+    thres = (total_edge // hp.batch_size_con)
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
 
-        total_steps = hp.epochs * (hp.node_num//hp.batch_size)
+        total_steps = hp.epochs * (total_edge//hp.batch_size_con)
         _gs = sess.run(global_step)
         idx = 0
         last_loss = 0
